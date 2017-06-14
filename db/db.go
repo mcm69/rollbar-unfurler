@@ -18,22 +18,30 @@ func Init() {
 	}
 }
 
-func addTeam(teamID string) {
+func addTeamIfNotExists(teamID string) {
+	var exists bool
+	db.View(func(tx *bolt.Tx) error {
+		exists = tx.Bucket([]byte(teamID)) != nil
+		return nil
+	})
+	if exists {
+		return
+	}
 	err := db.Update(func(tx *bolt.Tx) error {
 		//create team bucket
-		teamBucket, err := tx.CreateBucketIfNotExists([]byte(teamID))
+		teamBucket, err := tx.CreateBucket([]byte(teamID))
 		if err != nil {
 			return err
 		}
 
 		//create users sub-bucket
-		_, err = teamBucket.CreateBucketIfNotExists(usersBucket)
+		_, err = teamBucket.CreateBucket(usersBucket)
 		if err != nil {
 			return err
 		}
 
 		//create projects sub-bucket
-		_, err = teamBucket.CreateBucketIfNotExists(projectsBucket)
+		_, err = teamBucket.CreateBucket(projectsBucket)
 		if err != nil {
 			return err
 		}
@@ -73,6 +81,19 @@ func GetAuthToken(teamName string) string {
 	return result
 }
 
+func SaveAuthToken(teamID, user, token string) error {
+	addTeamIfNotExists(teamID)
+	err := db.Update(func(tx *bolt.Tx) error {
+		teamBucket := tx.Bucket([]byte(teamID))
+		usersBucket := teamBucket.Bucket(usersBucket)
+		return usersBucket.Put([]byte(user), []byte(token))
+	})
+	if err != nil {
+		log.Printf("SaveAuthToken: %s", err.Error())
+	}
+	return err
+}
+
 func GetProjectToken(teamName, project string) string {
 	result := ""
 
@@ -101,7 +122,7 @@ func DeleteUserToken(teamName, user string) {
 		if teamBucket == nil {
 			return fmt.Errorf("Team %s is not registered", teamName)
 		}
-		usersBucket := teamBucket.Bucket(projectsBucket)
+		usersBucket := teamBucket.Bucket(usersBucket)
 		return usersBucket.Delete([]byte(user))
 	})
 

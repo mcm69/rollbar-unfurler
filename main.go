@@ -9,6 +9,8 @@ import (
 
 	"strconv"
 
+	"io/ioutil"
+
 	"./db"
 )
 
@@ -51,9 +53,34 @@ func loadConfig() {
 	}
 }
 
+func serveFile(w http.ResponseWriter, path string) {
+	content, err := ioutil.ReadFile(path)
+	if err != nil {
+		log.Printf("Could not serve file %s: %s", path, err.Error())
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	w.Write(content)
+}
+
+func oauthCallbackHandler(w http.ResponseWriter, r *http.Request) {
+	code := r.FormValue("code")
+	if code != "" {
+		err := exchangeOauthCodeForToken(code)
+		if err != nil {
+			// serve error page?
+		}
+	}
+	serveFile(w, "static/thanks.html")
+}
+
 func main() {
 	loadConfig()
 	db.Init()
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		serveFile(w, "static/index.html")
+	})
 	http.HandleFunc("/slack", slackEventHandler)
+	http.HandleFunc("/oauth", oauthCallbackHandler)
 	log.Fatal(http.ListenAndServe(fmt.Sprintf("%s:%d", config.ListenHost, config.ListenPort), nil))
 }

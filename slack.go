@@ -12,13 +12,26 @@ import (
 	"strings"
 	"time"
 
+	"errors"
+
 	"./db"
 	"./rollbar"
 )
 
 const (
-	slackUnfurlURL = "https://slack.com/api/chat.unfurl"
+	slackUnfurlURL      = "https://slack.com/api/chat.unfurl"
+	slackOauthAccessURL = "https://slack.com/api/oauth.access"
 )
+
+type slackOauthAccessResponse struct {
+	OK          bool
+	Error       string
+	AccessToken string `json:"access_token"`
+	Scope       string
+	UserID      string `json:"user_id"`
+	TeamName    string `json:"team_name"`
+	TeamID      string `json:"team_id"`
+}
 
 type slackUnfurlPayload struct {
 	Token   string
@@ -65,6 +78,39 @@ type slackEvent struct {
 	Tokens struct {
 		OAuth []string
 	}
+}
+
+func exchangeOauthCodeForToken(code string) error {
+	form := url.Values{}
+	form.Add("client_id", config.ClientID)
+	form.Add("client_secret", config.ClientSecret)
+	form.Add("code", code)
+
+	log.Print("Posting oauth.access")
+
+	resp, err := http.PostForm(slackOauthAccessURL, form)
+	if err != nil {
+		log.Printf("error when posting oauth.access: %s", err.Error())
+		return err
+	}
+	defer resp.Body.Close()
+	var oauthResponse slackOauthAccessResponse
+	err = json.NewDecoder(resp.Body).Decode(&oauthResponse)
+	if err != nil {
+		log.Printf("error when deserializing oauth.access response: %s", err.Error())
+		return err
+	}
+	if !oauthResponse.OK {
+		log.Printf("oauth.access reported an error: %s", oauthResponse.Error)
+		return errors.New(oauthResponse.Error)
+	}
+	err = db.SaveAuthToken(oauthResponse.TeamID, oauthResponse.UserID, oauthResponse.AccessToken)
+	if err != nil {
+		log.Printf("Could not save auth token: %s", err.Error())
+		return err
+	}
+	log.Printf("Saved auth token for user %s/team %s (%s)", oauthResponse.UserID, oauthResponse.TeamID, oauthResponse.TeamName)
+	return nil
 }
 
 func slackEventHandler(w http.ResponseWriter, r *http.Request) {
@@ -253,7 +299,7 @@ func postToSlack(message slackUnfurlPayload) {
 
 	resp, err := http.PostForm(slackUnfurlURL, form)
 	if err != nil {
-		panic(err)
+		log.Printf("error when posting chat.unfurl: %s", err.Error())
 	}
 	defer resp.Body.Close()
 	b, _ := ioutil.ReadAll(resp.Body)
