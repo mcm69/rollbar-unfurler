@@ -94,13 +94,47 @@ func SaveAuthToken(teamID, user, token string) error {
 	return err
 }
 
-func GetProjectToken(teamName, project string) string {
+func SaveProjectToken(teamID, project, token string) error {
+	err := db.Update(func(tx *bolt.Tx) error {
+		teamBucket := tx.Bucket([]byte(teamID))
+		projectsBucket := teamBucket.Bucket(projectsBucket)
+		return projectsBucket.Put([]byte(project), []byte(token))
+	})
+	if err != nil {
+		log.Printf("SaveProjectToken: %s", err.Error())
+	}
+	return err
+}
+
+func GetProjects(team string) []string {
+	var result []string
+	err := db.View(func(tx *bolt.Tx) error {
+		teamBucket := tx.Bucket([]byte(team))
+		if teamBucket == nil {
+			return fmt.Errorf("Team %s is not registered", team)
+		}
+
+		projectsBucket := teamBucket.Bucket(projectsBucket)
+		projectsBucket.ForEach(func(project, token []byte) error {
+			result = append(result, string(project))
+			return nil
+		})
+
+		return nil
+	})
+	if err != nil {
+		log.Printf("GetProjects: %s", err.Error())
+	}
+	return result
+}
+
+func GetProjectToken(team, project string) string {
 	result := ""
 
 	err := db.View(func(tx *bolt.Tx) error {
-		teamBucket := tx.Bucket([]byte(teamName))
+		teamBucket := tx.Bucket([]byte(team))
 		if teamBucket == nil {
-			return fmt.Errorf("Team %s is not registered", teamName)
+			return fmt.Errorf("Team %s is not registered", team)
 		}
 
 		projectsBucket := teamBucket.Bucket(projectsBucket)
@@ -128,6 +162,21 @@ func DeleteUserToken(teamName, user string) {
 
 	if err != nil {
 		log.Printf("DeleteUserToken: %s", err.Error())
+	}
+}
+
+func DeleteProjectToken(teamName, project string) {
+	err := db.Update(func(tx *bolt.Tx) error {
+		teamBucket := tx.Bucket([]byte(teamName))
+		if teamBucket == nil {
+			return fmt.Errorf("Team %s is not registered", teamName)
+		}
+		projectsBucket := teamBucket.Bucket(projectsBucket)
+		return projectsBucket.Delete([]byte(project))
+	})
+
+	if err != nil {
+		log.Printf("DeleteProjectToken: %s", err.Error())
 	}
 }
 

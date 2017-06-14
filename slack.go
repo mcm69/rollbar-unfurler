@@ -80,6 +80,123 @@ type slackEvent struct {
 	}
 }
 
+func oauthCallbackHandler(w http.ResponseWriter, r *http.Request) {
+	code := r.FormValue("code")
+	if code != "" {
+		err := exchangeOauthCodeForToken(code)
+		if err != nil {
+			// serve error page?
+		}
+	}
+	serveFile(w, "static/thanks.html")
+}
+
+func slashCommandHandler(w http.ResponseWriter, r *http.Request) {
+	token := r.FormValue("token")
+	if token != config.SlackVerificationToken {
+		log.Printf("Token %s did not match the configured one at /slash", token)
+		http.Error(w, "Token mismatch", 403)
+		return
+	}
+	team := r.FormValue("team_id")
+	user := r.FormValue("user_id")
+	command := r.FormValue("command")
+	text := r.FormValue("text")
+	log.Printf("Received slash command (team %s, user %s): %s %s", team, user, command, text)
+	switch command {
+	case "/rollbar":
+		processRollbarSlashCommand(w, text, team)
+	default:
+		log.Printf("Unsupported slack command %s", command)
+	}
+}
+
+type slackSlashCommandResponse struct {
+	ResponseType string `json:"response_type"`
+	Text         string `json:"text"`
+}
+
+const (
+	rollbarCmdUsage = "Usage:\n" +
+		"`/rollbar set <project url> <project token>` - set read access token for project\n" +
+		"`/rollbar clear <project url>` - clear access token for project\n" +
+		"`/rollbar list` - list all projects that I will unfurl\n\n" +
+		"For example: `/rollbar set https://rollbar.com/MyOrganization/MyProject/` abcdef12345"
+	rollbarInvalidProjectURL = "Sorry, %s doesn't look like a Rollbar project URL. It should look like this: " +
+		"https://rollbar.com/MyOrganization/MyProject/"
+	rollbarInvalidToken = "Sorry, Rollbar reports %s is not a valid access token. Please copy the _read_ token from " +
+		"https://rollbar.com/%s/settings/access_tokens/"
+	rollbarTokenAdded           = "Thanks! I will now unfurl links from https://rollbar.com/%s/items/ for you."
+	rollbarTokenRemoved         = "Done! I will no longer unfurl links from https://rollbar.com/%s/items/."
+	rollbarGeneralError         = "An error occurred while executing the command. Please try again!"
+	rollbarNoProjectsConfigured = "No  Rollbar projects have been configured for your team.\n" +
+		"Use `/rollbar set` to add one."
+	rollbarProjectList = "I will unfurl links from the following projects:\n%s"
+)
+
+func processRollbarSlashCommand(w http.ResponseWriter, commandText, team string) {
+	resp := slackSlashCommandResponse{
+		ResponseType: "ephemeral",
+	}
+	parts := strings.Split(commandText, " ")
+	switch parts[0] {
+	case "list":
+		projects := db.GetProjects(team)
+		for k, p := range projects {
+			projects[k] = fmt.Sprintf("https://rollbar.com/%s/", p)
+		}
+		if len(projects) == 0 {
+			resp.Text = rollbarNoProjectsConfigured
+			break
+		}
+		resp.Text = fmt.Sprintf(rollbarProjectList, strings.Join(projects, "\n"))
+	case "set":
+		if len(parts) != 3 {
+			resp.Text = rollbarCmdUsage
+			break
+		}
+		projectURL := parts[1]
+		matches := rollbarProjectRegex.FindStringSubmatch(projectURL)
+		if len(matches) != 3 {
+			resp.Text = fmt.Sprintf(rollbarInvalidProjectURL, projectURL)
+			break
+		}
+		project := strings.ToLower(matches[1])
+		token := parts[2]
+		if !rollbar.IsValidToken(token) {
+			resp.Text = fmt.Sprintf(rollbarInvalidToken, token, project)
+			break
+		}
+		//finally, all is well
+		err := db.SaveProjectToken(team, project, token)
+		if err != nil {
+			resp.Text = rollbarGeneralError
+			break
+		}
+		resp.Text = fmt.Sprintf(rollbarTokenAdded, project)
+	case "clear":
+		if len(parts) != 2 {
+			resp.Text = rollbarCmdUsage
+			break
+		}
+		projectURL := parts[1]
+		matches := rollbarProjectRegex.FindStringSubmatch(projectURL)
+		if len(matches) != 3 {
+			resp.Text = fmt.Sprintf(rollbarInvalidProjectURL, projectURL)
+			break
+		}
+		project := strings.ToLower(matches[1])
+		db.DeleteProjectToken(team, project)
+		resp.Text = fmt.Sprintf(rollbarTokenRemoved, project)
+	default:
+		resp.Text = rollbarCmdUsage
+	}
+
+	b, _ := json.Marshal(resp)
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(b)
+}
+
 func exchangeOauthCodeForToken(code string) error {
 	form := url.Values{}
 	form.Add("client_id", config.ClientID)
@@ -181,6 +298,7 @@ func processURLVerification(w http.ResponseWriter, e *slackOuterEvent) {
 }
 
 var rollbarItemRegex = regexp.MustCompile(`(\w+\/\w+)\/items\/(\d+)/?`)
+var rollbarProjectRegex = regexp.MustCompile(`https?:\/\/rollbar.com\/(\w+\/\w+)($|\/?.*)`)
 
 func addLinkPreviews(event *slackEvent, team string) {
 	linkData := make(map[string]slackAttachment)

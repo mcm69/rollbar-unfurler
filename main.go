@@ -63,17 +63,6 @@ func serveFile(w http.ResponseWriter, path string) {
 	w.Write(content)
 }
 
-func oauthCallbackHandler(w http.ResponseWriter, r *http.Request) {
-	code := r.FormValue("code")
-	if code != "" {
-		err := exchangeOauthCodeForToken(code)
-		if err != nil {
-			// serve error page?
-		}
-	}
-	serveFile(w, "static/thanks.html")
-}
-
 func main() {
 	loadConfig()
 	db.Init()
@@ -82,5 +71,7 @@ func main() {
 	})
 	http.HandleFunc("/slack", slackEventHandler)
 	http.HandleFunc("/oauth", oauthCallbackHandler)
+	http.HandleFunc("/slash", slashCommandHandler)
+	log.Printf("Unfurler listening on %s:%d...", config.ListenHost, config.ListenPort)
 	log.Fatal(http.ListenAndServe(fmt.Sprintf("%s:%d", config.ListenHost, config.ListenPort), nil))
 }
