@@ -247,7 +247,7 @@ func slackEventHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	team := event.TeamID
-	log.Printf("Received event of type %s from team %s", event.Type, team)
+	log.Printf("Received event of type %s/%s from team %s", event.Type, event.Event.Type, team)
 
 	switch event.Type {
 	case "url_verification":
