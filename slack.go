@@ -121,7 +121,7 @@ const (
 		"`/rollbar set <project url> <project token>` - set read access token for project\n" +
 		"`/rollbar clear <project url>` - clear access token for project\n" +
 		"`/rollbar list` - list all projects that I will unfurl\n\n" +
-		"For example: `/rollbar set https://rollbar.com/MyOrganization/MyProject/` abcdef12345"
+		"For example: `/rollbar set https://rollbar.com/MyOrganization/MyProject/ abcdef12345`"
 	rollbarInvalidProjectURL = "Sorry, %s doesn't look like a Rollbar project URL. It should look like this: " +
 		"https://rollbar.com/MyOrganization/MyProject/"
 	rollbarInvalidToken = "Sorry, Rollbar reports %s is not a valid access token. Please copy the _read_ token from " +
