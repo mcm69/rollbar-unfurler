@@ -298,7 +298,7 @@ func processURLVerification(w http.ResponseWriter, e *slackOuterEvent) {
 }
 
 var rollbarItemRegex = regexp.MustCompile(`(\w+\/\w+)\/items\/(\d+)/?`)
-var rollbarProjectRegex = regexp.MustCompile(`https?:\/\/rollbar.com\/(\w+\/\w+)($|\/?.*)`)
+var rollbarProjectRegex = regexp.MustCompile(`https?:\/\/rollbar.com\/([a-zA-Z0-9_\-\.]+\/[a-zA-Z0-9_\-\.]+)($|\/?.*)`)
 
 func addLinkPreviews(event *slackEvent, team string) {
 	linkData := make(map[string]slackAttachment)
