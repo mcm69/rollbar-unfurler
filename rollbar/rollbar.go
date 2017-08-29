@@ -130,8 +130,8 @@ func GetItemData(counter, token string) (*Item, error) {
 }
 
 // GetOccurrenceData aegaa
-func GetOccurrenceData(id, token string) (*Occurrence, error) {
-	apiURL := fmt.Sprintf("https://api.rollbar.com/api/1/instance/%s?access_token=%s", id, token)
+func GetOccurrenceData(id int64, token string) (*Occurrence, error) {
+	apiURL := fmt.Sprintf("https://api.rollbar.com/api/1/instance/%d?access_token=%s", id, token)
 	resp, err := http.Get(apiURL)
 	if err != nil {
 		return nil, err
