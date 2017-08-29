@@ -16,14 +16,72 @@ type itemResponse struct {
 
 // Item blah
 type Item struct {
-	ID                       int
-	ProjectID                int `json:"project_id"`
-	Environment              string
-	Title                    string
-	FirstOccurrenceTimestamp int `json:"first_occurrence_timestamp"`
-	LastOccurrenceTimestamp  int `json:"last_occurrence_timestamp"`
-	Status                   string
-	TotalOccurrences         int `json:"total_occurrences"`
+	ID                       int         `json:"id"`
+	ProjectID                int         `json:"project_id"`
+	Counter                  int         `json:"counter"`
+	Environment              string      `json:"environment"`
+	Platform                 string      `json:"platform"`
+	Framework                string      `json:"framework"`
+	Hash                     string      `json:"hash"`
+	Title                    string      `json:"title"`
+	FirstOccurrenceID        int64       `json:"first_occurrence_id"`
+	FirstOccurrenceTimestamp int         `json:"first_occurrence_timestamp"`
+	ActivatingOccurrenceID   int64       `json:"activating_occurrence_id"`
+	LastActivatedTimestamp   int         `json:"last_activated_timestamp"`
+	LastResolvedTimestamp    interface{} `json:"last_resolved_timestamp"`
+	LastMutedTimestamp       interface{} `json:"last_muted_timestamp"`
+	LastOccurrenceID         int64       `json:"last_occurrence_id"`
+	LastOccurrenceTimestamp  int         `json:"last_occurrence_timestamp"`
+	TotalOccurrences         int         `json:"total_occurrences"`
+	LastModifiedBy           int         `json:"last_modified_by"`
+	Status                   string      `json:"status"`
+	Level                    string      `json:"level"`
+	IntegrationsData         interface{} `json:"integrations_data"`
+	AssignedUserID           interface{} `json:"assigned_user_id"`
+	GroupItemID              interface{} `json:"group_item_id"`
+	GroupStatus              int         `json:"group_status"`
+}
+
+// Occurrence is the JSON representation of a Rollbar occurrence
+type Occurrence struct {
+	ID        int64 `json:"id"`
+	ProjectID int   `json:"project_id"`
+	Timestamp int   `json:"timestamp"`
+	Version   int   `json:"version"`
+	Data      struct {
+		Server struct {
+			IP          string `json:"ip"`
+			CodeVersion string `json:"code_version"`
+			Host        string `json:"host"`
+		} `json:"server"`
+		Level    string `json:"level"`
+		Language string `json:"language"`
+		Body     struct {
+			TraceChain []struct {
+				Exception struct {
+					Message string `json:"message"`
+					Class   string `json:"class"`
+				} `json:"exception"`
+				Frames []struct {
+					Filename  string `json:"filename"`
+					Lineno    int    `json:"lineno"`
+					Method    string `json:"method"`
+					ClassName string `json:"class_name"`
+				} `json:"frames"`
+			} `json:"trace_chain"`
+		} `json:"body"`
+		Platform    string `json:"platform"`
+		Environment string `json:"environment"`
+		Framework   string `json:"framework"`
+		Timestamp   int    `json:"timestamp"`
+		UUID        string `json:"uuid"`
+	} `json:"data"`
+}
+
+type occurrenceResponse struct {
+	Err     int
+	Result  Occurrence
+	Message string
 }
 
 var re = regexp.MustCompile(`(\w+\/\w+)\/items\/(\d+)/?`)
@@ -68,5 +126,24 @@ func GetItemData(counter, token string) (*Item, error) {
 	if result.Err != 0 {
 		return nil, fmt.Errorf("API error: %s", result.Message)
 	}
+	return &result.Result, nil
+}
+
+// GetOccurrenceData aegaa
+func GetOccurrenceData(id, token string) (*Occurrence, error) {
+	apiURL := fmt.Sprintf("https://api.rollbar.com/api/1/instance/%s?access_token=%s", id, token)
+	resp, err := http.Get(apiURL)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	var result occurrenceResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, err
+	}
+	if result.Err != 0 {
+		return nil, fmt.Errorf("API error: %s", result.Message)
+	}
+
 	return &result.Result, nil
 }
