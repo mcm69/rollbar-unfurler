@@ -46,7 +46,7 @@ type slackAttachment struct {
 	Fallback string                 `json:"fallback"`
 	Title    string                 `json:"title"`
 	TS       int64                  `json:"ts"`
-	MrkdwnIn string                 `json:"mrkdwn_in"`
+	MrkdwnIn []string               `json:"mrkdwn_in"`
 	Fields   []slackAttachmentField `json:"fields"`
 }
 
@@ -431,7 +431,7 @@ func getUnfurlData(item *rollbar.Item, occurrence *rollbar.Occurrence) slackAtta
 			Value: stacktrace,
 			Short: false,
 		}
-		attachment.MrkdwnIn = "fields"
+		attachment.MrkdwnIn = []string{"fields"}
 	}
 
 	return attachment
