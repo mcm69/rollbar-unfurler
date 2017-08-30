@@ -21,6 +21,7 @@ import (
 const (
 	slackUnfurlURL      = "https://slack.com/api/chat.unfurl"
 	slackOauthAccessURL = "https://slack.com/api/oauth.access"
+	maxStacktraceFrames = 10
 )
 
 type slackOauthAccessResponse struct {
@@ -45,6 +46,7 @@ type slackAttachment struct {
 	Fallback string                 `json:"fallback"`
 	Title    string                 `json:"title"`
 	TS       int64                  `json:"ts"`
+	MrkdwnIn []string               `json:"mrkdwn_in"`
 	Fields   []slackAttachmentField `json:"fields"`
 }
 
@@ -319,9 +321,15 @@ func addLinkPreviews(event *slackEvent, team string) {
 		item, err := rollbar.GetItemData(counter, token)
 		if err != nil {
 			log.Printf("error getting data for %s: %s", link.URL, err.Error())
-		} else {
-			linkData[link.URL] = getUnfurlData(item)
+			continue
 		}
+		//TODO: the occurrence data should be cached as it is less or more immutable
+		occurrence, err := rollbar.GetOccurrenceData(item.ActivatingOccurrenceID, token)
+		if err != nil {
+			log.Printf("couldn't fetch occurrence data for %s: %s", link.URL, err.Error())
+			//don't continue as we have the item info, even if without stack trace
+		}
+		linkData[link.URL] = getUnfurlData(item, occurrence)
 	}
 
 	if len(linkData) == 0 {
@@ -372,13 +380,13 @@ func getTimeAgoString(d time.Duration) string {
 	return fmt.Sprintf("%.fd ago", t)
 }
 
-func getUnfurlData(item *rollbar.Item) slackAttachment {
+func getUnfurlData(item *rollbar.Item, occurrence *rollbar.Occurrence) slackAttachment {
 	now := time.Now()
 	attachment := slackAttachment{
 		Title:    item.Title,
 		Fallback: item.Title,
 		TS:       now.Unix(),
-		Fields:   make([]slackAttachmentField, 4),
+		Fields:   make([]slackAttachmentField, 5),
 	}
 
 	attachment.Fields[0] = slackAttachmentField{
@@ -401,6 +409,29 @@ func getUnfurlData(item *rollbar.Item) slackAttachment {
 		Title: "Last seen",
 		Value: getTimeAgoString(lastSeenAgo),
 		Short: true,
+	}
+
+	if occurrence != nil && len(occurrence.Data.Body.TraceChain[0].Frames) > 0 {
+		stacktrace := "```"
+		totalFrames := len(occurrence.Data.Body.TraceChain[0].Frames)
+		for i := 0; i < maxStacktraceFrames; i++ {
+			index := totalFrames - i - 1
+			if index < 0 {
+				break
+			}
+			frame := occurrence.Data.Body.TraceChain[0].Frames[index]
+			stacktrace += fmt.Sprintf("at %s.%s (%s:%d)\n", frame.ClassName, frame.Method, frame.Filename, frame.Lineno)
+		}
+		if totalFrames > maxStacktraceFrames {
+			stacktrace += fmt.Sprintf("(... %d more frames ...)\n", totalFrames-maxStacktraceFrames)
+		}
+		stacktrace += "```"
+		attachment.Fields[4] = slackAttachmentField{
+			Title: "Stack trace",
+			Value: stacktrace,
+			Short: false,
+		}
+		attachment.MrkdwnIn = []string{"fields"}
 	}
 
 	return attachment
