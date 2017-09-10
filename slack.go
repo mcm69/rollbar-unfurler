@@ -411,7 +411,7 @@ func getUnfurlData(item *rollbar.Item, occurrence *rollbar.Occurrence) slackAtta
 		Short: true,
 	}
 
-	if occurrence != nil && len(occurrence.Data.Body.TraceChain[0].Frames) > 0 {
+	if occurrence != nil && len(occurrence.Data.Body.TraceChain) > 0 && len(occurrence.Data.Body.TraceChain[0].Frames) > 0 {
 		stacktrace := "```"
 		totalFrames := len(occurrence.Data.Body.TraceChain[0].Frames)
 		for i := 0; i < maxStacktraceFrames; i++ {
