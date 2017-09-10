@@ -5,16 +5,16 @@ import (
 	"log"
 	"net/http"
 
+	"./db"
+
 	"os"
 
 	"strconv"
 
 	"io/ioutil"
-
-	"./db"
 )
 
-type Config struct {
+type configData struct {
 	// Host for the app to listen on. May be empty to listen on all interfaces
 	ListenHost string
 	// Port for the app to listen on. Default 8888
@@ -24,12 +24,12 @@ type Config struct {
 	SlackVerificationToken string
 }
 
-var config Config
+var config configData
 
 func loadConfig() {
 	port, _ := strconv.Atoi(os.Getenv("UNFURLER_PORT"))
 
-	config = Config{
+	config = configData{
 		ListenHost:             os.Getenv("UNFURLER_HOST"),
 		ListenPort:             port,
 		ClientID:               os.Getenv("UNFURLER_CLIENT_ID"),
